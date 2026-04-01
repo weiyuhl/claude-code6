@@ -3,3 +3,22 @@ dist/
 bun.lock
 *.node
 .DS_Store
+
+# Rust build artifacts
+claude-code-rust/target/
+jasmine-rust/target/
+*.rlib
+*.rmeta
+*.d
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# Rust project directories
+claude-code-rust/
+jasmine-rust/
+
+# Cargo lock files (optional - uncomment if you want to ignore)
+# Cargo.lock
