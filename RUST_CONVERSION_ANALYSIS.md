@@ -4,375 +4,319 @@
 
 **源项目**: Claude Code (TypeScript/React)  
 **目标**: 移植为 Rust，用于 Android APK 应用底层核心  
+**架构模式**: Rust核心库 + JNI绑定 + Kotlin Android应用  
 **版本**: 2.1.88  
 **源代码规模**: 4,756 个文件，1,906 个核心源码文件  
 **特性开关**: 50+ 个特性标志
 
 ---
 
-## 🛠️ 一、完整功能清单
+## 🎯 核心架构设计
 
-### 1.1 核心工具系统 (55+ 工具)
+### 架构概览
 
-#### 直接导入的工具 (31个)
-
-| 工具名称 | 功能描述 | 文件路径 | Rust可移植性 | 备注 |
-|---------|---------|---------|-------------|------|
-| **AgentTool** | 代理工具，支持子代理和fork | `src/tools/AgentTool/` | ⚠️ 部分 | 需要异步运行时，复杂状态管理 |
-| **SkillTool** | 技能执行 | `src/tools/SkillTool/` | ⚠️ 部分 | 需要脚本执行环境 |
-| **BashTool** | Shell命令执行 | `src/tools/BashTool/` | ✅ 可移植 | 需要进程管理，Android需要考虑沙箱 |
-| **FileEditTool** | 文件编辑 | `src/tools/FileEditTool/` | ✅ 可移植 | 需要文本差异算法 |
-| **FileReadTool** | 文件读取 | `src/tools/FileReadTool/` | ✅ 可移植 | 标准文件I/O |
-| **FileWriteTool** | 文件写入 | `src/tools/FileWriteTool/` | ✅ 可移植 | 标准文件I/O |
-| **GlobTool** | 文件模式匹配搜索 | `src/tools/GlobTool/` | ⚠️ 部分 | Android文件系统限制 |
-| **GrepTool** | 内容搜索 | `src/tools/GrepTool/` | ⚠️ 部分 | 需要ripgrep或等效实现 |
-| **NotebookEditTool** | Jupyter笔记本编辑 | `src/tools/NotebookEditTool/` | ✅ 可移植 | JSON解析 |
-| **WebFetchTool** | HTTP请求 | `src/tools/WebFetchTool/` | ✅ 可移植 | reqwest库 |
-| **TaskStopTool** | 停止任务 | `src/tools/TaskStopTool/` | ✅ 可移植 | 进程控制 |
-| **BriefTool** | 简报工具 | `src/tools/BriefTool/` | ⚠️ 部分 | 需要UI组件 |
-| **ExitPlanModeV2Tool** | 退出计划模式V2 | `src/tools/ExitPlanModeTool/` | ✅ 可移植 | 状态切换 |
-| **TestingPermissionTool** | 测试权限工具 | `src/tools/testing/` | ✅ 可移植 | 仅测试环境 |
-| **TungstenTool** | 分析工具 | `src/tools/TungstenTool/` | ⚠️ 部分 | 复杂分析逻辑 |
-| **TaskOutputTool** | 任务输出 | `src/tools/TaskOutputTool/` | ✅ 可移植 | 异步读取 |
-| **WebSearchTool** | Web搜索 | `src/tools/WebSearchTool/` | ✅ 可移植 | API集成 |
-| **TodoWriteTool** | 任务管理 | `src/tools/TodoWriteTool/` | ✅ 可移植 | 状态管理 |
-| **AskUserQuestionTool** | 用户交互 | `src/tools/AskUserQuestionTool/` | ⚠️ 部分 | 需要UI交互 |
-| **LSPTool** | LSP协议集成 | `src/tools/LSPTool/` | ⚠️ 部分 | 需要LSP客户端 |
-| **ListMcpResourcesTool** | 列出MCP资源 | `src/tools/ListMcpResourcesTool/` | ✅ 可移植 | MCP客户端 |
-| **ReadMcpResourceTool** | 读取MCP资源 | `src/tools/ReadMcpResourceTool/` | ✅ 可移植 | MCP客户端 |
-| **ToolSearchTool** | 工具搜索 | `src/tools/ToolSearchTool/` | ✅ 可移植 | 搜索算法 |
-| **EnterPlanModeTool** | 进入计划模式 | `src/tools/EnterPlanModeTool/` | ✅ 可移植 | 状态切换 |
-| **EnterWorktreeTool** | 进入工作树 | `src/tools/EnterWorktreeTool/` | ⚠️ 部分 | Git依赖 |
-| **ExitWorktreeTool** | 退出工作树 | `src/tools/ExitWorktreeTool/` | ⚠️ 部分 | Git依赖 |
-| **ConfigTool** | 配置工具 | `src/tools/ConfigTool/` | ✅ 可移植 | 配置管理 |
-| **TaskCreateTool** | 任务创建 | `src/tools/TaskCreateTool/` | ✅ 可移植 | 数据持久化 |
-| **TaskGetTool** | 任务获取 | `src/tools/TaskGetTool/` | ✅ 可移植 | 数据查询 |
-| **TaskUpdateTool** | 任务更新 | `src/tools/TaskUpdateTool/` | ✅ 可移植 | 数据持久化 |
-| **TaskListTool** | 任务列表 | `src/tools/TaskListTool/` | ✅ 可移植 | 数据持久化 |
-
-#### 条件导入的工具 (24个)
-
-| 工具名称 | 功能描述 | 触发条件 | Rust可移植性 | 备注 |
-|---------|---------|---------|-------------|------|
-| **REPLTool** | REPL环境 | `ant` only | ⚠️ 部分 | 需要代码执行环境 |
-| **SuggestBackgroundPRTool** | 后台PR建议 | `ant` only | ✅ 可移植 | Git集成 |
-| **SleepTool** | 休眠工具 | `PROACTIVE` or `KAIROS` | ✅ 可移植 | 定时器 |
-| **CronCreateTool** | 创建定时任务 | `AGENT_TRIGGERS` | ✅ 可移植 | 定时任务管理 |
-| **CronDeleteTool** | 删除定时任务 | `AGENT_TRIGGERS` | ✅ 可移植 | 定时任务管理 |
-| **CronListTool** | 列出定时任务 | `AGENT_TRIGGERS` | ✅ 可移植 | 定时任务管理 |
-| **RemoteTriggerTool** | 远程触发器 | `AGENT_TRIGGERS_REMOTE` | ✅ 可移植 | 远程控制 |
-| **MonitorTool** | 监控工具 | `MONITOR_TOOL` | ⚠️ 部分 | 需要系统监控 |
-| **SendUserFileTool** | 发送用户文件 | `KAIROS` | ✅ 可移植 | 文件传输 |
-| **PushNotificationTool** | 推送通知 | `KAIROS` or `KAIROS_PUSH_NOTIFICATION` | ⚠️ 部分 | 需要推送服务 |
-| **SubscribePRTool** | 订阅PR | `KAIROS_GITHUB_WEBHOOKS` | ✅ 可移植 | GitHub集成 |
-| **OverflowTestTool** | 溢出测试 | `OVERFLOW_TEST_TOOL` | ✅ 可移植 | 仅测试 |
-| **CtxInspectTool** | 上下文检查 | `CONTEXT_COLLAPSE` | ✅ 可移植 | 调试工具 |
-| **TerminalCaptureTool** | 终端捕获 | `TERMINAL_PANEL` | ⚠️ 部分 | 需要终端访问 |
-| **WebBrowserTool** | 浏览器控制 | `WEB_BROWSER_TOOL` | ❌ 困难 | Android Webview集成复杂 |
-| **SnipTool** | 历史剪辑 | `HISTORY_SNIP` | ✅ 可移植 | 上下文管理 |
-| **ListPeersTool** | 列出对等节点 | `UDS_INBOX` | ✅ 可移植 | 通信管理 |
-| **WorkflowTool** | 工作流脚本 | `WORKFLOW_SCRIPTS` | ⚠️ 部分 | 需要脚本引擎 |
-| **PowerShellTool** | PowerShell执行 | 环境检查 | ❌ 不适用 | Windows特定 |
-| **SendMessageTool** | 发送消息 | 始终加载 | ✅ 可移植 | 消息队列 |
-| **TeamCreateTool** | 团队创建 | `AGENT_SWARMS_ENABLED` | ✅ 可移植 | 状态管理 |
-| **TeamDeleteTool** | 团队删除 | `AGENT_SWARMS_ENABLED` | ✅ 可移植 | 状态管理 |
-| **VerifyPlanExecutionTool** | 验证计划执行 | `CLAUDE_CODE_VERIFY_PLAN=true` | ✅ 可移植 | 计划验证 |
-
-### 1.2 内置代理系统
-
-| 代理类型 | 功能 | Rust可移植性 |
-|---------|------|-------------|
-| **generalPurposeAgent** | 通用代理 | ✅ |
-| **exploreAgent** | 代码探索代理 | ✅ |
-| **planAgent** | 计划代理 | ✅ |
-| **verificationAgent** | 验证代理 | ✅ |
-| **statuslineSetup** | 状态行设置 | ✅ |
-| **claudeCodeGuideAgent** | Claude Code指南 | ✅ |
-
-### 1.3 核心命令系统 (84+ 命令)
-
-#### 基础命令 (61个)
-
-| 命令分类 | 命令 | 功能 | Rust可移植性 |
-|---------|------|------|-------------|
-| **基础** | `/help` | 帮助信息 | ✅ |
-| | `/clear` | 清除对话 | ✅ |
-| | `/compact` | 压缩上下文 | ⚠️ |
-| | `/cost` | 成本统计 | ✅ |
-| | `/exit` | 退出程序 | ✅ |
-| **配置** | `/config` | 配置管理 | ✅ |
-| | `/model` | 模型选择 | ✅ |
-| | `/permissions` | 权限管理 | ✅ |
-| | `/settings` | 设置查看 | ✅ |
-| | `/output-style` | 输出风格 | ✅ |
-| | `/theme` | 终端主题 | ✅ |
-| | `/color` | 颜色设置 | ✅ |
-| | `/vim` | Vim模式 | ✅ |
-| | `/keybindings` | 快捷键配置 | ✅ |
-| | `/statusline` | 状态行配置 | ✅ |
-| **MCP** | `/mcp` | MCP管理 | ✅ |
-| | `/desktop` | 桌面应用 | ✅ |
-| **会话** | `/resume` | 恢复会话 | ✅ |
-| | `/session` | 会话管理 | ✅ |
-| | `/share` | 分享会话 | ✅ |
-| | `/rename` | 重命名会话 | ✅ |
-| | `/rewind` | 回退会话 | ✅ |
-| **工具** | `/plugin` | 插件管理 | ✅ |
-| | `/skills` | 技能管理 | ✅ |
-| | `/reload-plugins` | 重新加载插件 | ✅ |
-| **代理** | `/agents` | 代理列表 | ✅ |
-| | `/advisor` | 顾问功能 | ✅ |
-| | `/branch` | 分支管理 | ✅ |
-| **文件** | `/files` | 文件管理 | ✅ |
-| | `/diff` | 差异查看 | ✅ |
-| | `/add-dir` | 添加目录 | ✅ |
-| | `/copy` | 复制功能 | ✅ |
-| **代码** | `/commit` | Git提交 | ✅ |
-| | `/review` | 代码审查 | ✅ |
-| | `/security-review` | 安全审查 | ✅ |
-| | `/init` | 初始化项目 | ✅ |
-| **性能** | `/fast` | 快速模式 | ✅ |
-| | `/effort` | 努力程度 | ✅ |
-| | `/stats` | 统计信息 | ✅ |
-| | `/usage` | 使用情况 | ✅ |
-| | `/extra-usage` | 额外使用 | ✅ |
-| **其他** | `/btw` | 快速笔记 | ✅ |
-| | `/feedback` | 发送反馈 | ✅ |
-| | `/stickers` | 贴纸功能 | ✅ |
-| | `/mobile` | 移动端二维码 | ✅ |
-| | `/ide` | IDE集成 | ✅ |
-| | `/chrome` | Chrome集成 | ✅ |
-| | `/terminal-setup` | 终端设置 | ✅ |
-| | `/heapdump` | 堆转储 | ✅ |
-| | `/tag` | 标签管理 | ✅ |
-| | `/plan` | 计划模式 | ✅ |
-| | `/privacy-settings` | 隐私设置 | ✅ |
-| | `/hooks` | 钩子管理 | ✅ |
-| | `/sandbox-toggle` | 沙箱切换 | ✅ |
-| | `/rate-limit-options` | 速率限制选项 | ✅ |
-| | `/passes` | 通行证管理 | ✅ |
-| | `/remote-env` | 远程环境 | ✅ |
-| | `/upgrade` | 升级功能 | ✅ |
-| | `/insights` | 会话分析报告 | ✅ |
-
-#### 条件命令 (23个)
-
-| 命令 | 功能 | 触发条件 | Rust可移植性 |
-|------|------|---------|-------------|
-| `/proactive` | 主动模式 | `PROACTIVE` or `KAIROS` | ⚠️ |
-| `/brief` | 简报模式 | `KAIROS` or `KAIROS_BRIEF` | ⚠️ |
-| `/assistant` | 助手模式 | `KAIROS` | ⚠️ |
-| `/bridge` | 桥接模式 | `BRIDGE_MODE` | ⚠️ |
-| `/remote-control-server` | 远程控制服务器 | `DAEMON` + `BRIDGE_MODE` | ⚠️ |
-| `/voice` | 语音模式 | `VOICE_MODE` | ⚠️ |
-| `/workflows` | 工作流脚本 | `WORKFLOW_SCRIPTS` | ⚠️ |
-| `/remote-setup` | 远程设置 | `CCR_REMOTE_SETUP` | ⚠️ |
-| `/fork` | 子代理分支 | `FORK_SUBAGENT` | ✅ |
-| `/buddy` | 伙伴功能 | `BUDDY` | ⚠️ |
-| `/peers` | 对等节点 | `UDS_INBOX` | ✅ |
-| `/thinkback` | 思考回溯 | 始终加载 | ✅ |
-| `/thinkback-play` | 思考回溯播放 | 始终加载 | ✅ |
-| `/torch` | 灯塔功能 | `TORCH` | ✅ |
-| `/subscribe-pr` | 订阅PR | `KAIROS_GITHUB_WEBHOOKS` | ✅ |
-| `/force-snip` | 强制剪辑 | `HISTORY_SNIP` | ✅ |
-| `/ultraplan` | 超级计划 | `ULTRAPLAN` | ⚠️ |
-| `/logout` | 登出 | 非3P服务 | ✅ |
-| `/login` | 登录 | 非3P服务 | ✅ |
-| `/tasks` | 任务管理 | 始终加载 | ✅ |
-| `/context` | 上下文查看 | 始终加载 | ✅ |
-| `/context-non-interactive` | 非交互上下文 | 始终加载 | ✅ |
-| `/extra-usage-non-interactive` | 非交互额外使用 | 始终加载 | ✅ |
-
-#### 内部命令 (27个，仅ant环境)
-
-| 命令 | 功能 |
-|------|------|
-| `/backfill-sessions` | 回填会话 |
-| `/break-cache` | 打破缓存 |
-| `/bughunter` | 猎虫工具 |
-| `/commit-push-pr` | 提交推送PR |
-| `/ctx-viz` | 上下文可视化 |
-| `/good-claude` | 好Claude |
-| `/issue` | Issue管理 |
-| `/init-verifiers` | 初始化验证器 |
-| `/mock-limits` | 模拟限制 |
-| `/bridge-kick` | 桥接踢出 |
-| `/version` | 版本信息 |
-| `/reset-limits` | 重置限制 |
-| `/reset-limits-non-interactive` | 非交互重置限制 |
-| `/onboarding` | 引导流程 |
-| `/teleport` | 传送功能 |
-| `/ant-trace` | Ant追踪 |
-| `/perf-issue` | 性能问题 |
-| `/env` | 环境管理 |
-| `/oauth-refresh` | OAuth刷新 |
-| `/debug-tool-call` | 调试工具调用 |
-| `/agents-platform` | 代理平台 |
-| `/autofix-pr` | 自动修复PR |
-| `/summary` | 会话总结 |
-| `/release-notes` | 发布说明 |
-| `/pr-comments` | PR评论 |
-
----
-
-## 📝 二、提示词系统完整清单
-
-### 2.1 系统提示词核心组件
-
-#### 基础提示词框架
-```rust
-// 系统提示词组装逻辑
-pub struct SystemPromptBuilder {
-    intro_section: String,           // 简单介绍部分
-    system_section: String,          // 系统规则部分
-    doing_tasks_section: String,     // 任务执行指南
-    actions_section: String,         // 行动谨慎指南
-    tools_section: String,           // 工具使用指南
-    tone_section: String,            // 语气风格指南
-    efficiency_section: String,      // 输出效率指南
-    dynamic_sections: Vec<String>,   // 动态部分（记忆、环境等）
-}
+```
+┌─────────────────────────────────────────────────┐
+│            Android App (Kotlin)                 │
+│  ┌─────────────────────────────────────────┐   │
+│  │    UI Layer (Jetpack Compose/XML)       │   │
+│  │    - Chat界面                            │   │
+│  │    - 工具执行结果展示                     │   │
+│  │    - 会话管理界面                        │   │
+│  └──────────────────┬──────────────────────┘   │
+│                     │ JNI                       │
+│  ┌──────────────────▼──────────────────────┐   │
+│  │      claude_core (libclaude_core.so)     │   │
+│  │  ┌──────────────────────────────────┐   │   │
+│  │  │  JNI Bindings (jni/)             │   │   │
+│  │  │  - SessionManager                │   │   │
+│  │  │  - ToolExecutor                  │   │   │
+│  │  │  - ApiClient                     │   │   │
+│  │  │  - PromptBuilder                 │   │   │
+│  │  └──────────────────────────────────┘   │   │
+│  │  ┌──────────────────────────────────┐   │   │
+│  │  │  Core Engine (core/)             │   │   │
+│  │  │  - 会话管理                        │   │   │
+│  │  │  - 工具执行引擎                    │   │   │
+│  │  │  - Anthropic API客户端            │   │   │
+│  │  │  - 提示词系统                      │   │   │
+│  │  │  - 查询引擎                        │   │   │
+│  │  └──────────────────────────────────┘   │   │
+│  └─────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
 ```
 
-#### 提示词组件详细列表
+### 关键设计原则
 
-| 组件 | 内容 | Rust实现难度 |
-|------|------|-------------|
-| **getSimpleIntroSection()** | 基础介绍和风险说明 | ✅ 简单 |
-| **getSimpleSystemSection()** | 系统规则和工具权限 | ✅ 简单 |
-| **getSimpleDoingTasksSection()** | 任务执行指南 | ✅ 简单 |
-| **getActionsSection()** | 行动谨慎和确认机制 | ✅ 简单 |
-| **getUsingYourToolsSection()** | 工具使用优先级指南 | ⚠️ 中等 |
-| **getSimpleToneAndStyleSection()** | 语言风格指南 | ✅ 简单 |
-| **getOutputEfficiencySection()** | 输出效率指南 | ✅ 简单 |
-| **getSessionSpecificGuidanceSection()** | 会话特定指导 | ⚠️ 中等 |
-| **getProactiveSection()** | 主动工作模式指南 | ⚠️ 中等 |
-| **getBriefSection()** | 简报模式指南 | ⚠️ 中等 |
-
-### 2.2 动态提示词部分
-
-| 动态部分 | 功能 | Rust实现 |
-|---------|------|----------|
-| **memory** | 自动记忆加载 | ✅ |
-| **env_info_simple** | 环境信息 | ✅ |
-| **language** | 语言偏好 | ✅ |
-| **output_style** | 输出风格配置 | ✅ |
-| **mcp_instructions** | MCP服务器指令 | ✅ |
-| **scratchpad** | 临时目录指令 | ✅ |
-| **frc** | 函数结果清除 | ⚠️ |
-| **summarize_tool_results** | 工具结果摘要 | ✅ |
-| **token_budget** | 令牌预算 | ⚠️ |
-| **brief** | 简报模式 | ⚠️ |
-
-### 2.3 代理特定提示词
-
-| 代理 | 提示词 | Rust实现 |
-|------|--------|----------|
-| **DEFAULT_AGENT_PROMPT** | 通用代理默认提示词 | ✅ |
-| **VERIFICATION_SYSTEM_PROMPT** | 验证代理提示词 | ✅ |
-| **EXPLORE_SYSTEM_PROMPT** | 探索代理提示词 | ✅ |
-| **PLAN_SYSTEM_PROMPT** | 计划代理提示词 | ✅ |
-| **STATUSLINE_SYSTEM_PROMPT** | 状态行代理提示词 | ✅ |
-| **TEAMMATE_SYSTEM_PROMPT_ADDENDUM** | 团队成员附加提示词 | ✅ |
+1. **纯库设计**: Rust部分编译为`.so`动态库，不包含CLI入口
+2. **JNI优先**: 所有对外接口通过JNI暴露给Kotlin
+3. **Android原生UI**: 不使用终端UI，由Kotlin/Jetpack Compose处理
+4. **本地运行**: 所有逻辑在Android设备本地执行，仅API调用访问网络
+5. **无远程依赖**: 不连接电脑或其他远程服务（除Anthropic API）
 
 ---
 
-## 🔧 三、Rust移植架构设计
+## 🛠️ 一、完整功能清单
 
-### 3.1 核心模块划分
+### 1.1 需要移植的核心模块
+
+| 模块 | 原始位置 | Rust实现 | JNI接口 | Android适配 |
+|------|---------|---------|---------|------------|
+| **会话管理** | `src/Task.ts`, `src/session/` | `core/session.rs` | `jni/session.rs` | ✅ SQLite存储 |
+| **API客户端** | `src/services/api/` | `core/api.rs` | `jni/api.rs` | ✅ reqwest |
+| **工具引擎** | `src/tools/` | `core/tools/` | `jni/tools.rs` | ⚠️ 需要适配 |
+| **提示词系统** | `src/constants/prompts.ts` | `core/prompts.rs` | `jni/prompts.rs` | ✅ 纯逻辑 |
+| **查询引擎** | `src/QueryEngine.ts` | `core/query.rs` | `jni/query.rs` | ✅ 核心逻辑 |
+| **配置管理** | `src/utils/config.ts` | `core/config.rs` | `jni/config.rs` | ✅ JSON |
+| **代理系统** | `src/tools/AgentTool/` | `core/agent.rs` | `jni/agent.rs` | ✅ 异步 |
+
+### 1.2 需要重新设计的模块
+
+| 模块 | 原始实现 | Android方案 | 说明 |
+|------|---------|-------------|------|
+| **CLI参数解析** | Commander.js | ❌ 移除 | 由Kotlin处理 |
+| **终端UI** | Ink/React | ❌ 移除 | 用Jetpack Compose |
+| **命令系统** | 斜杠命令 | ⚠️ 重新设计 | 作为Kotlin可调用的API |
+| **BashTool** | Shell执行 | ⚠️ 重新设计 | Android受限shell |
+| **Git操作** | simple-git | ⚠️ 受限 | Android Git库限制 |
+
+### 1.3 不需要移植的模块
+
+| 模块 | 原因 |
+|------|------|
+| **PowerShellTool** | Windows特定，Android不适用 |
+| **REPLTool** | Android无终端环境 |
+| **TerminalCaptureTool** | Android无终端 |
+| **WebBrowserTool** | Android用WebView替代 |
+| **桌面集成** (IDE, Chrome) | Android不适用 |
+| **远程控制** (bridge) | 不连接电脑 |
+
+---
+
+## 📦 二、Rust库架构设计
+
+### 2.1 项目结构
 
 ```
 claude-code-rust/
+├── Cargo.toml                  # 库配置（crate-type = ["cdylib"]）
 ├── src/
-│   ├── lib.rs                    # 库入口
-│   ├── main.rs                   # 应用入口
-│   ├── cli/                      # CLI层
+│   ├── lib.rs                  # 库入口，导出公共API
+│   │
+│   ├── jni/                    # JNI绑定层
+│   │   ├── mod.rs              # JNI模块入口
+│   │   ├── session.rs          # 会话管理JNI接口
+│   │   │   - Java_com_claude_core_SessionManager_createSession
+│   │   │   - Java_com_claude_core_SessionManager_sendMessage
+│   │   │   - Java_com_claude_core_SessionManager_getHistory
+│   │   │   - Java_com_claude_core_SessionManager_deleteSession
+│   │   ├── tools.rs            # 工具执行JNI接口
+│   │   │   - Java_com_claude_core_ToolExecutor_executeTool
+│   │   │   - Java_com_claude_core_ToolExecutor_listTools
+│   │   │   - Java_com_claude_core_ToolExecutor_getToolSchema
+│   │   ├── api.rs              # API客户端JNI接口
+│   │   │   - Java_com_claude_core_ApiClient_initialize
+│   │   │   - Java_com_claude_core_ApiClient_setApiKey
+│   │   │   - Java_com_claude_core_ApiClient_getModels
+│   │   └── callback.rs         # 异步回调处理
+│   │       - Rust→Kotlin回调机制
+│   │       - 流式响应推送
+│   │
+│   ├── core/                   # 核心引擎（纯Rust逻辑）
 │   │   ├── mod.rs
-│   │   ├── args.rs               # 参数解析
-│   │   ├── commands.rs           # 命令处理
-│   │   └── output.rs             # 输出格式化
-│   ├── core/                     # 核心引擎
+│   │   ├── session.rs          # 会话管理
+│   │   │   - Session结构体
+│   │   │   - 会话生命周期管理
+│   │   │   - 对话历史存储
+│   │   ├── query.rs            # 查询引擎
+│   │   │   - 查询处理流程
+│   │   │   - 流式响应处理
+│   │   │   - 工具调用循环
+│   │   ├── tool_manager.rs     # 工具管理器
+│   │   │   - 工具注册表
+│   │   │   - 工具执行框架
+│   │   │   - 权限检查
+│   │   └── context.rs          # 上下文管理
+│   │       - 上下文窗口管理
+│   │       - Token计数
+│   │
+│   ├── api/                    # API客户端
 │   │   ├── mod.rs
-│   │   ├── session.rs            # 会话管理
-│   │   ├── query.rs              # 查询引擎
-│   │   ├── tool_manager.rs       # 工具管理器
-│   │   └── context.rs            # 上下文管理
-│   ├── tools/                    # 工具实现
+│   │   ├── client.rs           # HTTP客户端
+│   │   │   - reqwest异步客户端
+│   │   │   - 连接池管理
+│   │   ├── auth.rs             # 认证管理
+│   │   │   - API Key管理
+│   │   │   - OAuth支持
+│   │   └── streaming.rs        # 流式处理
+│   │       - SSE解析
+│   │       - 事件流处理
+│   │
+│   ├── tools/                  # 工具实现（Android适配版）
 │   │   ├── mod.rs
-│   │   ├── trait.rs              # 工具trait定义
-│   │   ├── bash.rs               # Bash工具
-│   │   ├── file.rs               # 文件工具
-│   │   ├── web.rs                # Web工具
-│   │   ├── agent.rs              # 代理工具
-│   │   └── mcp.rs                # MCP工具
-│   ├── prompts/                  # 提示词系统
+│   │   ├── trait.rs            # Tool trait定义
+│   │   ├── file_read.rs        # 文件读取（Android存储）
+│   │   ├── file_write.rs       # 文件写入（Android存储）
+│   │   ├── web_fetch.rs        # HTTP请求
+│   │   ├── web_search.rs       # Web搜索
+│   │   ├── todo_write.rs       # 任务管理
+│   │   ├── agent.rs            # 代理工具
+│   │   └── android/            # Android特定工具
+│   │       ├── shell.rs        # 受限shell（Android）
+│   │       └── clipboard.rs    # 剪贴板访问
+│   │
+│   ├── prompts/                # 提示词系统
 │   │   ├── mod.rs
-│   │   ├── builder.rs            # 提示词构建器
-│   │   ├── sections.rs           # 提示词部分
-│   │   └── dynamic.rs            # 动态提示词
-│   ├── api/                      # API客户端
+│   │   ├── builder.rs          # 提示词构建器
+│   │   ├── sections.rs         # 提示词部分
+│   │   └── dynamic.rs          # 动态提示词
+│   │
+│   ├── config/                 # 配置系统
 │   │   ├── mod.rs
-│   │   ├── anthropic.rs          # Anthropic API
-│   │   ├── auth.rs               # 认证
-│   │   └── streaming.rs          # 流式处理
-│   ├── bridge/                   # 桥接系统
-│   │   ├── mod.rs
-│   │   ├── server.rs             # 桥接服务器
-│   │   └── session.rs            # 远程会话
-│   ├── config/                   # 配置系统
-│   │   ├── mod.rs
-│   │   ├── settings.rs           # 设置管理
-│   │   └── permissions.rs        # 权限系统
-│   └── utils/                    # 工具函数
+│   │   ├── settings.rs         # 设置管理
+│   │   └── storage.rs          # 配置存储（SQLite）
+│   │
+│   └── utils/                  # 工具函数
 │       ├── mod.rs
-│       ├── git.rs                # Git操作
-│       ├── shell.rs              # Shell操作
-│       └── crypto.rs             # 加密工具
+│       ├── crypto.rs           # 加密工具
+│       └── json.rs             # JSON处理
+│
+└── android/                    # Android构建配置
+    ├── build.gradle            # Gradle构建脚本
+    └── jni/                    # JNI头文件生成
+        └── Android.mk
 ```
 
-### 3.2 核心依赖选择
+### 2.2 JNI接口设计
+
+#### Kotlin端接口定义
+
+```kotlin
+// SessionManager.kt
+package com.claude.core
+
+class SessionManager {
+    companion object {
+        init {
+            System.loadLibrary("claude_core")
+        }
+    }
+    
+    // JNI方法声明
+    private external fun nativeCreateSession(config: String): Long
+    private external fun nativeSendMessage(sessionId: Long, message: String, callback: SessionCallback)
+    private external fun nativeGetHistory(sessionId: Long): String
+    private external fun nativeDeleteSession(sessionId: Long)
+    
+    // 公共API
+    fun createSession(config: SessionConfig): Long {
+        return nativeCreateSession(Json.encodeToString(config))
+    }
+    
+    fun sendMessage(sessionId: Long, message: String, callback: SessionCallback) {
+        nativeSendMessage(sessionId, message, callback)
+    }
+}
+
+// 回调接口
+interface SessionCallback {
+    fun onToken(token: String)
+    fun onToolCall(toolName: String, input: String)
+    fun onToolResult(toolName: String, result: String)
+    fun onComplete(response: String)
+    fun onError(error: String)
+}
+```
+
+#### Rust端JNI实现
+
+```rust
+// src/jni/session.rs
+use jni::JNIEnv;
+use jni::objects::{JClass, JString};
+use jni::sys::{jlong, jobject};
+
+#[no_mangle]
+pub extern "C" fn Java_com_claude_core_SessionManager_nativeCreateSession(
+    env: JNIEnv,
+    _class: JClass,
+    config: JString,
+) -> jlong {
+    let config_str: String = env.get_string(config).unwrap().into();
+    let session_config: SessionConfig = serde_json::from_str(&config_str).unwrap();
+    
+    let session = Session::new(session_config);
+    Box::into_raw(Box::new(session)) as jlong
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_claude_core_SessionManager_nativeSendMessage(
+    env: JNIEnv,
+    _class: JClass,
+    session_id: jlong,
+    message: JString,
+    callback: jobject,
+) {
+    let session = unsafe { &mut *(session_id as *mut Session) };
+    let msg: String = env.get_string(message).unwrap().into();
+    
+    // 异步执行，通过回调返回结果
+    tokio::spawn(async move {
+        match session.send_message(&msg).await {
+            Ok(stream) => {
+                // 处理流式响应
+                for await token in stream {
+                    // 通过JNI回调Kotlin
+                    call_kotlin_callback(env, callback, "onToken", token);
+                }
+            }
+            Err(e) => {
+                call_kotlin_callback(env, callback, "onError", e.to_string());
+            }
+        }
+    });
+}
+```
+
+### 2.3 核心依赖配置
 
 ```toml
+[package]
+name = "claude-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "claude_core"
+crate-type = ["cdylib"]  # 编译为动态库供JNI使用
+
 [dependencies]
+# JNI绑定
+jni = "0.21"
+
 # 异步运行时
 tokio = { version = "1.0", features = ["full"] }
 
-# HTTP客户端
-reqwest = { version = "0.11", features = ["json", "stream"] }
+# HTTP客户端（支持Android）
+reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls"] }
 
 # JSON处理
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# CLI框架
-clap = { version = "4.0", features = ["derive"] }
-
-# 终端UI
-ratatui = "0.24"
-crossterm = "0.27"
-
-# 文件系统
-walkdir = "2.4"
-glob = "0.3"
-
-# Git操作
-git2 = "0.18"
-
-# 加密
-rustls = "0.21"
-jsonwebtoken = "9.0"
-
-# 异步流
-futures = "0.3"
-async-stream = "0.3"
+# 数据库（Android支持）
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 # 错误处理
 anyhow = "1.0"
 thiserror = "1.0"
 
+# 异步流
+futures = "0.3"
+async-stream = "0.3"
+
 # 日志
 tracing = "0.1"
-tracing-subscriber = "0.3"
 
 # 正则表达式
 regex = "1.9"
@@ -380,240 +324,404 @@ regex = "1.9"
 # 时间处理
 chrono = { version = "0.4", features = ["serde"] }
 
-# 配置
-config = "0.13"
-toml = "0.8"
+# 加密
+rustls = "0.21"
+jsonwebtoken = "9.0"
 
-# 序列化
-bincode = "1.3"
+# 文件处理
+walkdir = "2.4"
 
-# Android特定（条件编译）
-[target.'cfg(target_os = "android")'.dependencies]
-jni = "0.21"
+# Android日志
 android_logger = "0.13"
+log = "0.4"
 ```
 
 ---
 
-## 📊 四、功能移植可行性详细分析
+## 🔧 三、模块详细分析
 
-### 4.1 高优先级核心功能
+### 3.1 会话管理模块
 
-| 功能模块 | 原始实现 | Rust方案 | 复杂度 | Android适配 |
-|---------|---------|---------|--------|------------|
-| **CLI参数解析** | Commander.js | clap | 低 | ✅ 原生支持 |
-| **配置管理** | JSON文件 | config crate | 低 | ⚠️ Android存储限制 |
-| **会话管理** | 文件系统 | SQLite | 中 | ✅ 原生支持 |
-| **API通信** | Axios | reqwest | 低 | ✅ 原生支持 |
-| **流式处理** | SSE | tokio-stream | 中 | ✅ 原生支持 |
-| **工具执行** | 子进程 | std::process | 中 | ⚠️ Android沙箱限制 |
-| **文件操作** | fs模块 | std::fs | 低 | ⚠️ Android权限 |
+**原始实现**: `src/Task.ts`, `src/session/`
 
-### 4.2 中等优先级功能
-
-| 功能模块 | 原始实现 | Rust方案 | 复杂度 | Android适配 |
-|---------|---------|---------|--------|------------|
-| **终端UI** | Ink/React | ratatui | 高 | ❌ 需要Android UI |
-| **WebSocket** | ws crate | tokio-tungstenite | 中 | ✅ 原生支持 |
-| **Git操作** | simple-git | git2 | 中 | ⚠️ 需要Git库 |
-| **MCP协议** | 自定义实现 | 自定义实现 | 高 | ✅ 可移植 |
-| **权限系统** | 文件权限 | 自定义实现 | 中 | ⚠️ Android权限模型 |
-| **记忆系统** | 文件存储 | SQLite | 中 | ✅ 原生支持 |
-| **插件系统** | 动态加载 | 动态库加载 | 高 | ⚠️ Android限制多 |
-
-### 4.3 低优先级/困难功能
-
-| 功能模块 | 原始实现 | Rust方案 | 复杂度 | Android适配 |
-|---------|---------|---------|--------|------------|
-| **语音模式** | Web Audio | 需要原生实现 | 极高 | ⚠️ 需要Android音频API |
-| **浏览器控制** | Playwright | 需要WebView | 极高 | ⚠️ Android WebView |
-| **LSP集成** | vscode-languageserver | 自定义实现 | 高 | ⚠️ 需要IDE集成 |
-| **自动更新** | npm更新 | 自定义更新器 | 中 | ⚠️ 应用商店限制 |
-| **系统集成** | 系统调用 | 平台特定 | 高 | ❌ Android限制 |
-
----
-
-## 🎯 五、Android特定适配方案
-
-### 5.1 存储系统适配
+**Rust实现**: `core/session.rs`
 
 ```rust
-// Android存储适配层
-#[cfg(target_os = "android")]
-mod android_storage {
-    use jni::JNIEnv;
+// 核心结构
+pub struct Session {
+    id: String,
+    config: SessionConfig,
+    history: Vec<Message>,
+    context: Context,
+    tool_manager: ToolManager,
+}
+
+impl Session {
+    pub fn new(config: SessionConfig) -> Self { ... }
     
-    pub struct AndroidStorage {
-        context: JObject,
+    pub async fn send_message(&mut self, message: &str) -> Result<MessageStream> {
+        // 1. 添加用户消息到历史
+        // 2. 构建提示词
+        // 3. 调用API
+        // 4. 处理工具调用
+        // 5. 返回流式响应
     }
     
-    impl AndroidStorage {
-        pub fn get_internal_dir(&self) -> PathBuf {
-            // 获取内部存储目录
-            // /data/data/<package>/files/
+    pub fn get_history(&self) -> &[Message] { ... }
+    
+    pub fn save_to_db(&self, db: &Connection) -> Result<()> { ... }
+    
+    pub fn load_from_db(db: &Connection, id: &str) -> Result<Self> { ... }
+}
+```
+
+**JNI接口**:
+- `createSession(config: String): Long`
+- `sendMessage(sessionId: Long, message: String, callback: SessionCallback)`
+- `getHistory(sessionId: Long): String`
+- `deleteSession(sessionId: Long)`
+
+**Android适配**:
+- ✅ 使用SQLite存储会话历史
+- ✅ 支持会话恢复
+- ✅ 异步操作通过回调返回
+
+### 3.2 API客户端模块
+
+**原始实现**: `src/services/api/`
+
+**Rust实现**: `api/client.rs`
+
+```rust
+pub struct ApiClient {
+    client: reqwest::Client,
+    api_key: String,
+    base_url: String,
+}
+
+impl ApiClient {
+    pub fn new(api_key: String) -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap(),
+            api_key,
+            base_url: "https://api.anthropic.com".to_string(),
         }
-        
-        pub fn get_external_dir(&self) -> Option<PathBuf> {
-            // 获取外部存储目录
-            // /storage/emulated/0/Android/data/<package>/files/
-        }
-        
-        pub fn get_cache_dir(&self) -> PathBuf {
-            // 获取缓存目录
-            // /data/data/<package>/cache/
-        }
+    }
+    
+    pub async fn send_message(
+        &self,
+        messages: &[Message],
+        tools: &[Tool],
+        model: &str,
+    ) -> Result<MessageStream> {
+        // 构建请求
+        // 发送流式请求
+        // 返回SSE事件流
     }
 }
 ```
 
-### 5.2 网络适配
+**JNI接口**:
+- `initialize(apiKey: String): Boolean`
+- `setApiKey(apiKey: String)`
+- `getModels(): String`
+
+**Android适配**:
+- ✅ 使用reqwest（支持Android）
+- ✅ 流式响应处理
+- ✅ 错误重试机制
+
+### 3.3 工具引擎模块
+
+**原始实现**: `src/tools/`
+
+**Rust实现**: `core/tool_manager.rs` + `tools/`
 
 ```rust
-// Android网络适配
-#[cfg(target_os = "android")]
-mod android_network {
-    use reqwest::Client;
+// 工具trait
+pub trait Tool {
+    fn name(&self) -> &str;
+    fn description(&self) -> &str;
+    fn schema(&self) -> ToolSchema;
+    async fn execute(&self, input: ToolInput) -> Result<ToolOutput>;
+}
+
+// 工具管理器
+pub struct ToolManager {
+    tools: HashMap<String, Box<dyn Tool>>,
+}
+
+impl ToolManager {
+    pub fn new() -> Self {
+        let mut manager = Self { tools: HashMap::new() };
+        
+        // 注册Android适用的工具
+        manager.register(Box::new(FileReadTool::new()));
+        manager.register(Box::new(FileWriteTool::new()));
+        manager.register(Box::new(WebFetchTool::new()));
+        manager.register(Box::new(WebSearchTool::new()));
+        manager.register(Box::new(TodoWriteTool::new()));
+        manager.register(Box::new(AgentTool::new()));
+        
+        manager
+    }
     
-    pub fn create_android_client() -> Client {
-        Client::builder()
-            .timeout(Duration::from_secs(30))
-            .connect_timeout(Duration::from_secs(10))
-            .pool_max_idle_per_host(4)
-            .build()
-            .expect("Failed to create HTTP client")
+    pub async fn execute(&self, name: &str, input: ToolInput) -> Result<ToolOutput> {
+        let tool = self.tools.get(name)
+            .ok_or_else(|| anyhow::anyhow!("Tool not found: {}", name))?;
+        tool.execute(input).await
     }
 }
 ```
 
-### 5.3 权限系统适配
+**JNI接口**:
+- `executeTool(name: String, input: String, callback: ToolCallback): String`
+- `listTools(): String`
+- `getToolSchema(name: String): String`
+
+**Android适配**:
+- ⚠️ BashTool需要重新设计为受限shell
+- ✅ 文件操作使用Android存储API
+- ✅ Web工具正常使用
+
+### 3.4 提示词系统模块
+
+**原始实现**: `src/constants/prompts.ts`
+
+**Rust实现**: `prompts/builder.rs`
 
 ```rust
-// Android权限适配
-#[cfg(target_os = "android")]
-mod android_permissions {
-    pub struct AndroidPermissions {
-        context: JObject,
+pub struct PromptBuilder {
+    sections: Vec<PromptSection>,
+}
+
+impl PromptBuilder {
+    pub fn new() -> Self { ... }
+    
+    pub fn build_system_prompt(
+        &self,
+        tools: &[Tool],
+        context: &Context,
+    ) -> String {
+        let mut prompt = String::new();
+        
+        prompt.push_str(&self.intro_section());
+        prompt.push_str(&self.system_section());
+        prompt.push_str(&self.doing_tasks_section());
+        prompt.push_str(&self.actions_section());
+        prompt.push_str(&self.tools_section(tools));
+        prompt.push_str(&self.tone_section());
+        
+        // 动态部分
+        prompt.push_str(&self.env_info_section(context));
+        prompt.push_str(&self.memory_section(context));
+        
+        prompt
+    }
+}
+```
+
+**JNI接口**:
+- `buildSystemPrompt(tools: String, context: String): String`
+
+**Android适配**:
+- ✅ 纯逻辑，无需特殊适配
+- ✅ 环境信息适配Android
+
+### 3.5 查询引擎模块
+
+**原始实现**: `src/QueryEngine.ts`
+
+**Rust实现**: `core/query.rs`
+
+```rust
+pub struct QueryEngine {
+    api_client: ApiClient,
+    tool_manager: ToolManager,
+    prompt_builder: PromptBuilder,
+}
+
+impl QueryEngine {
+    pub async fn execute_query(
+        &self,
+        session: &mut Session,
+        message: &str,
+    ) -> Result<MessageStream> {
+        // 1. 构建消息列表
+        let messages = session.build_messages(message);
+        
+        // 2. 构建系统提示词
+        let system_prompt = self.prompt_builder.build_system_prompt(
+            &self.tool_manager.list_tools(),
+            &session.context(),
+        );
+        
+        // 3. 调用API
+        let stream = self.api_client.send_message(
+            &messages,
+            &self.tool_manager.list_tools(),
+            &session.model(),
+        ).await?;
+        
+        // 4. 处理工具调用
+        Ok(self.process_stream(stream, session).await)
+    }
+}
+```
+
+**JNI接口**:
+- `executeQuery(sessionId: Long, message: String, callback: QueryCallback)`
+
+**Android适配**:
+- ✅ 核心逻辑，无需特殊适配
+- ✅ 流式响应通过JNI回调
+
+---
+
+## 📱 四、Android集成方案
+
+### 4.1 Kotlin端架构
+
+```
+app/src/main/java/com/claude/app/
+├── MainActivity.kt              # 主Activity
+├── ClaudeApplication.kt         # Application类
+│
+├── core/
+│   ├── ClaudeCore.kt           # Rust核心库封装
+│   ├── SessionManager.kt       # 会话管理
+│   ├── ToolExecutor.kt         # 工具执行
+│   └── ApiClient.kt            # API客户端
+│
+├── ui/
+│   ├── chat/
+│   │   ├── ChatScreen.kt       # 聊天界面
+│   │   ├── ChatViewModel.kt    # 聊天ViewModel
+│   │   └── MessageList.kt      # 消息列表
+│   ├── tools/
+│   │   ├── ToolResultView.kt   # 工具结果展示
+│   │   └── ToolPermission.kt   # 工具权限对话框
+│   └── settings/
+│       └── SettingsScreen.kt   # 设置界面
+│
+└── data/
+    ├── database/
+    │   └── AppDatabase.kt      # Room数据库
+    └── repository/
+        └── SessionRepository.kt # 会话仓库
+```
+
+### 4.2 JNI调用示例
+
+```kotlin
+// ClaudeCore.kt
+package com.claude.app.core
+
+import com.claude.core.SessionManager
+import com.claude.core.ApiClient
+import com.claude.core.ToolExecutor
+
+class ClaudeCore(private val context: Context) {
+    private val sessionManager = SessionManager()
+    private val apiClient = ApiClient()
+    private val toolExecutor = ToolExecutor()
+    
+    suspend fun initialize(apiKey: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            apiClient.initialize(apiKey)
+        }
     }
     
-    impl AndroidPermissions {
-        pub fn check_permission(&self, permission: &str) -> bool {
-            // 检查Android权限
+    suspend fun sendMessage(
+        sessionId: Long,
+        message: String,
+        onToken: (String) -> Unit,
+        onToolCall: (String, String) -> Unit,
+        onComplete: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val callback = object : SessionCallback {
+            override fun onToken(token: String) = onToken(token)
+            override fun onToolCall(toolName: String, input: String) = onToolCall(toolName, input)
+            override fun onToolResult(toolName: String, result: String) { }
+            override fun onComplete(response: String) = onComplete(response)
+            override fun onError(error: String) = onError(error)
         }
         
-        pub fn request_permission(&self, permission: &str) {
-            // 请求Android权限
+        sessionManager.sendMessage(sessionId, message, callback)
+    }
+}
+```
+
+### 4.3 Gradle配置
+
+```kotlin
+// app/build.gradle.kts
+android {
+    defaultConfig {
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
+    
+    externalNativeBuild {
+        cmake {
+            path = file("../../claude-code-rust/android/CMakeLists.txt")
+        }
+    }
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.compose.ui:ui:1.5.0")
+    implementation("androidx.room:room-runtime:2.6.0")
 }
 ```
 
 ---
 
-## 📈 六、实现路线图
+## ⚠️ 五、关键挑战和解决方案
 
-### 第一阶段：核心框架
-
-**目标**: 基础CLI和API通信
-
-- [ ] CLI参数解析框架
-- [ ] 配置管理系统
-- [ ] Anthropic API客户端
-- [ ] 流式响应处理
-- [ ] 基础会话管理
-- [ ] 错误处理框架
-
-**交付物**: 可以发送API请求的命令行工具
-
-### 第二阶段：工具系统
-
-**目标**: 实现核心工具集
-
-- [ ] 工具trait定义
-- [ ] BashTool (进程管理)
-- [ ] FileReadTool / FileWriteTool / FileEditTool
-- [ ] WebFetchTool / WebSearchTool
-- [ ] TodoWriteTool / Task工具
-- [ ] 工具权限系统
-
-**交付物**: 可以执行基本任务的工具系统
-
-### 第三阶段：代理和会话
-
-**目标**: 代理系统和会话管理
-
-- [ ] AgentTool基础实现
-- [ ] 子代理管理
-- [ ] 会话持久化
-- [ ] 上下文管理
-- [ ] 提示词构建器
-
-**交付物**: 支持代理协作的完整系统
-
-### 第四阶段：Android适配
-
-**目标**: Android平台集成
-
-- [ ] JNI绑定
-- [ ] Android UI集成
-- [ ] 存储系统适配
-- [ ] 权限系统适配
-- [ ] 网络适配
-- [ ] 性能优化
-
-**交付物**: 可在Android运行的核心库
-
-### 第五阶段：高级功能
-
-**目标**: 高级功能和优化
-
-- [ ] MCP协议支持
-- [ ] 桥接系统
-- [ ] 插件系统
-- [ ] 记忆系统
-- [ ] 性能优化
-- [ ] 测试和文档
-
-**交付物**: 功能完整的Rust实现
-
----
-
-## ⚠️ 七、关键挑战和解决方案
-
-### 7.1 Android平台限制
+### 5.1 Rust-Android集成
 
 | 挑战 | 解决方案 |
 |------|---------|
-| **文件系统访问限制** | 使用Android Storage Access Framework |
-| **进程执行限制** | 使用Android的受限执行环境 |
-| **网络权限** | 配置网络安全配置 |
-| **存储权限** | 使用运行时权限请求 |
-| **后台执行限制** | 使用前台服务 |
+| **交叉编译** | 使用`cross`工具或NDK工具链 |
+| **JNI类型转换** | 使用serde序列化复杂类型 |
+| **异步回调** | tokio + JNI全局引用 |
+| **内存管理** | Rust所有权 + JNI局部引用 |
+| **日志集成** | android_logger + log crate |
 
-### 7.2 性能优化
+### 5.2 Android平台限制
+
+| 挑战 | 解决方案 |
+|------|---------|
+| **文件系统访问** | Storage Access Framework |
+| **进程执行** | 受限shell或移除BashTool |
+| **网络权限** | Android网络安全配置 |
+| **存储权限** | 运行时权限请求 |
+| **后台执行** | 前台服务 + 通知 |
+| **电池优化** | WorkManager调度 |
+
+### 5.3 性能优化
 
 | 优化点 | 策略 |
 |--------|------|
-| **内存管理** | 使用内存池和对象复用 |
-| **网络优化** | 连接池和请求合并 |
-| **缓存策略** | 多级缓存（内存、磁盘、数据库） |
-| **异步处理** | 充分利用tokio异步运行时 |
-| **批处理** | 合并小操作减少系统调用 |
-
-### 7.3 安全考虑
-
-| 安全问题 | 解决方案 |
-|----------|---------|
-| **API密钥存储** | Android Keystore |
-| **数据传输加密** | TLS 1.3 |
-| **本地数据加密** | SQLCipher |
-| **权限最小化** | 按需请求权限 |
-| **代码混淆** | ProGuard/R8 |
+| **内存使用** | 对象池、流式处理 |
+| **网络优化** | 连接池、请求合并 |
+| **数据库** | SQLite WAL模式 |
+| **异步处理** | tokio多线程运行时 |
+| **UI响应** | 协程 + 主线程调度 |
 
 ---
 
-## 🧪 八、测试策略
+## 🧪 六、测试策略
 
-### 8.1 单元测试
+### 6.1 Rust端测试
 
 ```rust
 #[cfg(test)]
@@ -621,66 +729,58 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_tool_execution() {
-        // 测试工具执行
-    }
-    
-    #[test]
-    fn test_prompt_building() {
-        // 测试提示词构建
+    fn test_session_creation() {
+        let config = SessionConfig::default();
+        let session = Session::new(config);
+        assert!(!session.id().is_empty());
     }
     
     #[tokio::test]
-    async fn test_api_communication() {
-        // 测试API通信
+    async fn test_api_client() {
+        let client = ApiClient::new("test-key".to_string());
+        // 测试API调用
     }
 }
 ```
 
-### 8.2 集成测试
+### 6.2 JNI集成测试
 
-- API集成测试
-- 工具集成测试
-- 会话管理测试
-- Android平台测试
+```kotlin
+@RunWith(AndroidJUnit4::class)
+class SessionManagerTest {
+    @Test
+    fun testCreateSession() {
+        val manager = SessionManager()
+        val config = SessionConfig(model = "claude-sonnet-4-20250514")
+        val sessionId = manager.createSession(config)
+        assertTrue(sessionId > 0)
+    }
+}
+```
 
-### 8.3 性能测试
+### 6.3 Android端测试
 
-- 内存使用测试
-- 网络性能测试
-- 电池消耗测试
-- 启动时间测试
-
----
-
-## 📚 九、参考资源
-
-### 9.1 相关Rust库
-
-- **tokio**: 异步运行时
-- **reqwest**: HTTP客户端
-- **clap**: CLI框架
-- **ratatui**: 终端UI
-- **git2**: Git操作
-- **serde**: 序列化
-- **rusqlite**: SQLite绑定
-
-### 9.2 Android开发资源
-
-- **jni crate**: Rust-Java互操作
-- **ndk-rs**: Android NDK绑定
-- **Android Studio**: 开发环境
-- **Android文档**: 官方API文档
-
-### 9.3 学习路径
-
-1. Rust异步编程
-2. Android NDK开发
-3. HTTP/2和流式处理
-4. 终端UI设计
-5. 系统编程
+- 单元测试: JUnit + Mockito
+- UI测试: Espresso / Compose Testing
+- 集成测试: AndroidJUnit4
+- 性能测试: Android Benchmark
 
 ---
 
-**文档版本**: 1.0  
-**最后更新**: 2026-04-01
+## 📚 七、参考资源
+
+### Rust Android开发
+- [jni crate文档](https://docs.rs/jni)
+- [Android NDK Rust](https://mozilla.github.io/firefox-browser-architecture/experiments/2017-09-06-rust-on-android.html)
+- [cargo-ndk](https://github.com/bbqsrc/cargo-ndk)
+
+### 相关项目
+- [tiktoken-rs](https://github.com/DevBlockhouse/tiktoken-rs) - Rust token计数
+- [reqwest](https://docs.rs/reqwest) - HTTP客户端（支持Android）
+- [rusqlite](https://docs.rs/rusqlite) - SQLite绑定（支持Android）
+
+---
+
+**文档版本**: 2.0  
+**最后更新**: 2026-04-01  
+**架构变更**: 从CLI工具改为Android库 + JNI绑定
