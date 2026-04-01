@@ -63,12 +63,19 @@
 | 模块 | 原始位置 | Rust实现 | JNI接口 | Android适配 |
 |------|---------|---------|---------|------------|
 | **会话管理** | `src/Task.ts`, `src/session/` | `core/session.rs` | `jni/session.rs` | ✅ SQLite存储 |
-| **API客户端** | `src/services/api/` | `core/api.rs` | `jni/api.rs` | ✅ reqwest |
+| **API客户端** | `src/services/api/` | `api/client.rs` | `jni/api.rs` | ✅ reqwest |
+| **认证管理** | `src/utils/auth.ts` | `auth/manager.rs` | `jni/auth.rs` | ✅ Android Keystore |
+| **上下文管理** | `src/context.ts` | `core/context_manager.rs` | `jni/context.rs` | ✅ Token计数 |
 | **工具引擎** | `src/tools/` | `core/tools/` | `jni/tools.rs` | ⚠️ 需要适配 |
-| **提示词系统** | `src/constants/prompts.ts` | `core/prompts.rs` | `jni/prompts.rs` | ✅ 纯逻辑 |
+| **提示词系统** | `src/constants/prompts.ts` | `prompts/builder.rs` | `jni/prompts.rs` | ✅ 纯逻辑 |
 | **查询引擎** | `src/QueryEngine.ts` | `core/query.rs` | `jni/query.rs` | ✅ 核心逻辑 |
-| **配置管理** | `src/utils/config.ts` | `core/config.rs` | `jni/config.rs` | ✅ JSON |
+| **配置管理** | `src/utils/config.ts` | `config/settings.rs` | `jni/config.rs` | ✅ JSON |
+| **错误处理** | `src/utils/errors.ts` | `core/error_handler.rs` | `jni/errors.rs` | ✅ 统一处理 |
+| **日志系统** | `src/utils/log.ts` | `utils/logging.rs` | `jni/logging.rs` | ✅ Android Logcat |
 | **代理系统** | `src/tools/AgentTool/` | `core/agent.rs` | `jni/agent.rs` | ✅ 异步 |
+| **性能监控** | - | `utils/metrics.rs` | `jni/metrics.rs` | ✅ 性能追踪 |
+| **安全模块** | - | `security/module.rs` | `jni/security.rs` | ✅ 输入验证 |
+| **离线支持** | - | `offline/module.rs` | `jni/offline.rs` | ✅ 缓存队列 |
 
 ### 1.2 需要重新设计的模块
 
