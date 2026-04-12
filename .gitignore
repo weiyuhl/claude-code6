@@ -20,5 +20,8 @@ jasmine-rust/target/
 claude-code-rust/
 jasmine-rust/
 
+# Android build output
+jniLibs/
+
 # Cargo lock files (optional - uncomment if you want to ignore)
 # Cargo.lock
